@@ -100,24 +100,29 @@ class Geolocalisation:
         x2,y2,z2= self2.sphere2cartesian()
         x3,y3,z3= self3.sphere2cartesian()
         r1,r2,r3 = self1.dist, self2.dist, self3.dist
-        print("debug1")
+       
         # On transforme le système d'équations linéaires en une équation matricielle AX=B
         A = np.array([[2*x2-2*x1,2*y2-2*y1,2*z2-2*z1],
                       [2*x3-2*x2,2*y3-2*y2,2*z3-2*z2],
                       [2*x1-2*x3,2*y1-2*y3,2*z1-2*z3]])
-        print("debug2")
+       
         B = np.array([[(r1**2)-(r2**2)+(x2**2)-(x1**2)+(y2**2)-(y1**2)+(z2**2)-(z1**2)],
                      [(r2**2)-(r3**2)+(x3**2)-(x2**2)+(y3**2)-(y2**2)+(z3**2)-(z2**2)],
                      [(r3**2)-(r1**2)+(x1**2)-(x3**2)+(y1**2)-(y3**2)+(z1**2)-(z3**2)]])
-        print("debug3")
-        X, residuals, rank, s = np.linalg.lstsq(A, B, rcond=None)
-    
+        
+        resultat = np.linalg.lstsq(A, B, rcond=None)
+        X = resultat[0].ravel()
+        residuals = resultat[1]
+        try:
+            self.lat, self.longi=self.cart2sphere(X)
+        except Exception as e:
+            raise Exception("Erreur dans l'execution de la conversion des coordonnées cartésiennes en sphériques") from e
         if comm:
             print("Résultat (x, y, z) ≈", X.ravel())
             if residuals.size > 0:
                 print("Erreur résiduelle :", residuals)
             else:
-                print("Aucune erreur résiduelle (système parfaitement compatible)")
+                print("Aucune erreur résiduelle.")
         
         return X
 
