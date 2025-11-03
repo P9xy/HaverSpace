@@ -3,15 +3,18 @@
     déterminer les coordonnées latitudes, longitudes d'un endroit inconnu par trilatération
  ou calculer une distance géodésique précise avec les formules d'haversine
 
-    Auteur {P9xy} github - https://github.com/P9xy/
+    Auteur {P9xy} github -> https://github.com/P9xy/
     Licensed under MIT License 
 """
-
+ 
 from math import *
 import re
 import traceback
 import numpy as np
-
+# Constantes 
+R = 6.378137*(10**6) #demi grand axe en m
+R2 = 6.3567523142*(10**6) # demi petit axe
+e = 8.1819190842622*(10**-2) # excentricité (aplatissement au pole) de la terre
 class BadCoordinates(Exception):
     def __init__(self, *args):
         if args:
@@ -51,7 +54,7 @@ class Geolocalisation:
         else:
             self.vlat, self.vlon = True, True
         if self.dist is not None:
-            self.vdist = self.dist > 0
+            self.vdist = self.dist >= 0
         else:
             self.vdist = True
         self.lst = {'latitude':(self.lat,self.vlat),'longitude':(self.longi,self.vlon),'distance':(self.dist,self.vdist)} # dictionnaire des attributs de Geolocalisation et de leur valeur et validité
@@ -68,7 +71,6 @@ class Geolocalisation:
         return (sin(teta/2)**2)
     def distance(self,self2, comm=True, km=False, precision=5):
         # calcule la distance minimale entre deux objets par la formule d'haversine
-        R = 6378137 # rayon de la terre
         D = 0 # distance entre 1 et 2
         deltaphi = self2.lat-self.lat # difference de latitude entre 1 et 2
         deltalambda = self2.longi-self.longi # difference de longitude entre 1 et 2
@@ -86,13 +88,37 @@ class Geolocalisation:
     def sphere2cartesian(self):
         #converti les coordonées spheriques en cartésiennes 
         # pour utiliser dans l'equation de cercle
-        R = 6378137 #grand axe en m
-        N = R/(sqrt(1-(exp(2)*(sin(self.lat))**2)))
-        x = (N+self.h)*cos(self.lat)*cos(self.longi)
-        y = (N+self.h)*cos(self.lat)*sin(self.longi)
-        z = (N*(1-exp(2))+self.h)*sin(self.lat)
+        N = R/(sqrt(1-(e**2)*(sin(self.lat))**2))
+        lat = (self.lat * 2*pi)/360
+        longi = (self.longi * 2*pi)/360
+        x = (N+self.h)*cos(lat)*cos(longi)
+        y = (N+self.h)*cos(lat)*sin(longi)
+        z = (N*(1-e**2)+self.h)*sin(lat)
         return (x,y,z)
-    
+
+    def cart2sphere(self,coord):
+        if not all(isinstance(n,float)for n in coord):
+            raise TypeError
+        elif len(coord) != 3:
+            raise IndexError
+        else:
+            x,y,z = coord
+            p = sqrt((x**2)+(y**2))
+            if p != 0:
+                teta = atan((z*R)/(p*R2))
+            else: # si p = 0, l'angle vaut 0 par convention
+                teta = 0
+            phi = atan((z+(((R**2)-(R2**2))/R2**2)**2)*R2*(sin(teta)**3))/(p-(e**2)*R*(cos(teta)**3))
+            N = R/(sqrt(1-(e**2)*(sin(phi)**2)))
+            h = (p/(cos(phi)))-N
+            lambd = atan2(y,x)
+            self.lat = (phi * 360)/(2*pi)
+            self.longi = (lambd * 360)/(2*pi)
+            self.h = h
+            lat = self.lat
+            longi = self.longi
+            return (lat, longi) 
+
     def trilateration(self,self1,self2,self3,comm=True):
         print(f"Calcul de la position de {self.nom} ...\n")
         # changement du spherique au cartésien pour avoir des equations de cercle
@@ -118,13 +144,12 @@ class Geolocalisation:
         except Exception as e:
             raise Exception("Erreur dans l'execution de la conversion des coordonnées cartésiennes en sphériques") from e
         if comm:
-            print("Résultat (x, y, z) ≈", X.ravel())
+            print("Résultat (latitude, longitude) ≈", self.lat, self.longi)
             if residuals.size > 0:
                 print("Erreur résiduelle :", residuals)
             else:
                 print("Aucune erreur résiduelle.")
-        
-        return X
+        return (self.lat, self.longi)
 
 def main():
     print(r"#################################################")
@@ -184,7 +209,10 @@ if __name__ == '__main__':
                 print(f"Les coordonnées du point {x.nom} sont {x.trilateration(P1,P2,P3)}.\n")
                 print("-------------------------------------------------")
             except ValueError as v:
-                print(f"{ValueError} Les coordonnées sont des nombres réels")
+                print("Les paramètres donnés en entrée n'ont pas permis de donner de résultat.")
+            except TypeError as t:
+               print(f"TypeError: Les paramètres sont des nombres réels")
+               traceback.print_exc()
             except BadCoordinates as bc:
                 print(bc)
             except Exception as e:
